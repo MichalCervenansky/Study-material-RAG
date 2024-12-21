@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  langchain_service:
+    build:
+      context: ./langchain_service
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./langchain_service/.env
+  streamlit_frontend:
+    build:
+      context: ./streamlit_frontend
+    ports:
+      - "8501:8501"
+    depends_on:
+      - langchain_service
