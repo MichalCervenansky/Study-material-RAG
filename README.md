@@ -11,7 +11,7 @@ rag-service/
 │   ├── tests/               # Unit tests for backend
 │   ├── Dockerfile           # Docker setup for LangChain service
 │   ├── requirements.txt     # Python dependencies for LangChain service
-│   └── app.py               # FastAPI entry point
+│   └── main.py               # FastAPI entry point
 ├── streamlit_frontend/      # Streamlit-based user interface
 │   ├── pages/               # Optional additional pages for Streamlit
 │   ├── Dockerfile           # Docker setup for Streamlit frontend
@@ -19,7 +19,6 @@ rag-service/
 │   └── main.py              # Main Streamlit application entry point
 ├── docker-compose.yml       # Orchestrates the backend and frontend
 ├── .gitignore               # Files and directories to ignore in version control
-├── LICENSE                  # Project license
 └── README.md                # Project overview and instructions
 ```
 
@@ -69,7 +68,7 @@ The LangChain service exposes the following endpoints:
    ```
 3. Run the service locally:
    ```bash
-   uvicorn app:app --reload --host 0.0.0.0 --port 8000
+   uvicorn main:app --host 0.0.0.0 --port 8000
    ```
 
 ### Frontend Development
@@ -91,17 +90,6 @@ pytest langchain_service/tests
 
 ## Deployment
 Deploy the services using Docker Compose or container orchestration platforms like Kubernetes. Use the provided `Dockerfile` and `docker-compose.yml` for deployment.
-
-## Contributing
-Contributions are welcome! Please follow these steps:
-1. Fork the repository.
-2. Create a feature branch: `git checkout -b feature-name`.
-3. Commit your changes: `git commit -m "Add feature name"`.
-4. Push to the branch: `git push origin feature-name`.
-5. Open a pull request.
-
-## License
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 - [LangChain](https://github.com/hwchase17/langchain)

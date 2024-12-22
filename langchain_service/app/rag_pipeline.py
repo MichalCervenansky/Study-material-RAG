@@ -14,7 +14,7 @@ def rag_pipeline(file_paths: List[str], query: str) -> str:
     Returns:
         str: The generated answer.
     """
-    documents = load_documents(file_paths)
+    documents = []
     all_chunks = [chunk for doc in documents for chunk in split_text_into_chunks(doc)]
     relevant_chunks = retrieve_relevant_chunks(all_chunks, query)
     combined_context = " ".join(relevant_chunks)

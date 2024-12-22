@@ -6,34 +6,7 @@ st.set_page_config(page_title="RAG Service", page_icon="📘", layout="wide")
 
 # Header
 st.title("📘 Retrieval-Augmented Generation (RAG) Service")
-st.markdown("Upload your study materials as PDFs and ask questions to get insights powered by LangChain and Ollama.")
-
-# File uploader for PDFs
-uploaded_files = st.file_uploader(
-    "Upload PDF documents",
-    type=["pdf"],
-    accept_multiple_files=True
-)
-
-# Display uploaded files
-if uploaded_files:
-    st.subheader("Uploaded Files")
-    for uploaded_file in uploaded_files:
-        st.write(f"- {uploaded_file.name}")
-
-    # Submit button
-    if st.button("Process Documents"):
-        st.info("Processing documents... This may take a moment.")
-        # Make a request to the LangChain service
-        for uploaded_file in uploaded_files:
-            response = requests.post(
-                "http://localhost:8000/upload",
-                files={"file": uploaded_file.getvalue()}
-            )
-            if response.status_code == 200:
-                st.success(f"Processed: {uploaded_file.name}")
-            else:
-                st.error(f"Failed to process: {uploaded_file.name}")
+st.markdown("Ask questions to get insights powered by LangChain and Ollama.")
 
 # Question input
 st.subheader("Ask a Question")
