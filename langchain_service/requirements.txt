@@ -1,7 +1,0 @@
-langchain
-ollama
-uvicorn
-fastapi
-PyPDF2
-python-dotenv
-python-multipart

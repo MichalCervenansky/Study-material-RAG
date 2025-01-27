@@ -2,11 +2,11 @@ version: '3.8'
 services:
   langchain_service:
     build:
-      context: ./langchain_service
+      context: backend
     ports:
       - "8000:8000"
     env_file:
-      - ./langchain_service/.env
+      - backend/.env
   streamlit_frontend:
     build:
       context: ./streamlit_frontend

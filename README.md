@@ -85,7 +85,7 @@ The LangChain service exposes the following endpoints:
 ### Testing
 Unit tests for the backend can be run using:
 ```bash
-pytest langchain_service/tests
+pytest backend/tests
 ```
 
 ## Deployment

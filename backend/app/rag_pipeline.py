@@ -1,35 +1,25 @@
 import os
 from typing import List, Iterator
 from app.ollama_integration import OllamaAPI
-from app.document_loader import load_documents
-from app.retriever import split_text_into_chunks, retrieve_relevant_chunks
+from app.retriever import retrieve_relevant_chunks
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
 
-def rag_pipeline(file_paths: List[str], query: str) -> Iterator[str]:
+def rag_pipeline(document_store, query: str) -> Iterator[str]:
     """
-    Process documents and answer a query using the RAG pipeline.
+    Answer a query using the RAG pipeline with pre-computed embeddings.
 
     Args:
-        file_paths (List[str]): List of document file paths.
+        document_store: DocumentStore instance containing pre-computed embeddings
         query (str): The user query.
 
     Returns:
-        str: The generated answer.
+        Iterator[str]: The generated answer chunks.
     """
-    # Load documents from file paths
-    documents = load_documents(file_paths)
-
-    # Create chunks from all documents
-    all_chunks = []
-    for doc in documents:
-        chunks = split_text_into_chunks(doc)
-        all_chunks.extend(chunks)
-
     # Retrieve relevant chunks based on the query
-    relevant_chunks = retrieve_relevant_chunks(all_chunks, query)
+    relevant_chunks = retrieve_relevant_chunks(document_store, query)
 
     # Combine chunks into context
     combined_context = " ".join(relevant_chunks)
