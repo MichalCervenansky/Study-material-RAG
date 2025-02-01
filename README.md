@@ -1,26 +1,82 @@
-
 # Retrieval-Augmented Generation (RAG) Service
 
-This project implements a Retrieval-Augmented Generation (RAG) service using LangChain, Ollama LLM, and Streamlit. It allows users to upload study materials as PDFs, ask questions, and receive insightful answers.
+A RAG service using LangChain, Ollama LLM, and Streamlit for processing and querying study materials.
+
+## Quick Start
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd Study-material-RAG
+```
+
+2. Configure environment:
+Copy the example environment file and modify as needed:
+```bash
+cp .env.example .env
+```
+
+3. Start the services:
+```bash
+docker-compose up -d
+```
+
+This will start:
+- Backend service at http://localhost:8000
+- Frontend interface at http://localhost:8501
+
+## Prerequisites
+
+1. Install Ollama from https://ollama.ai
+2. Pull the required model:
+```bash
+ollama pull deepseek-r1:latest
+```
+
+## Development Setup
+
+### Running Services Locally
+
+1. Start Ollama:
+```bash
+ollama run deepseek-r1:latest
+```
+
+2. Start the backend:
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+3. Start the frontend:
+```bash
+cd streamlit_frontend
+pip install -r requirements.txt
+streamlit run Home.py
+```
 
 ## Project Structure
 ```
-rag-service/
-├── langchain_service/       # Backend service for document processing and RAG pipeline
-│   ├── app/                 # Core application logic
-│   ├── tests/               # Unit tests for backend
-│   ├── Dockerfile           # Docker setup for LangChain service
-│   ├── requirements.txt     # Python dependencies for LangChain service
-│   └── main.py               # FastAPI entry point
-├── streamlit_frontend/      # Streamlit-based user interface
-│   ├── pages/               # Optional additional pages for Streamlit
-│   ├── Dockerfile           # Docker setup for Streamlit frontend
-│   ├── requirements.txt     # Python dependencies for Streamlit
-│   └── main.py              # Main Streamlit application entry point
-├── docker-compose.yml       # Orchestrates the backend and frontend
-├── .gitignore               # Files and directories to ignore in version control
-└── README.md                # Project overview and instructions
+./
+├── backend/              # FastAPI + LangChain service
+├── streamlit_frontend/   # Streamlit UI
+├── docker-compose.yml   # Container orchestration
+└── .env                 # Environment configuration
 ```
+
+## Usage
+1. Access the Streamlit interface at http://localhost:8501
+2. Upload PDF documents in the Database section
+3. Ask questions about your documents in the Chat section
+
+## Environment Variables
+Key configurations in `.env`:
+- `BACKEND_URL`: Backend service URL
+- `OLLAMA_BASE_URL`: Ollama service URL
+- `OLLAMA_MODEL`: LLM model to use
+- `CHUNK_SIZE`: Document chunking size
+- `CHUNK_OVERLAP`: Overlap between chunks
 
 ## Features
 - **Document Upload**: Upload PDF study materials.
@@ -28,61 +84,12 @@ rag-service/
 - **Question Answering**: Generate answers to user queries using RAG and Ollama LLM.
 - **User Interface**: A Streamlit-based frontend for easy interaction.
 
-## Setup and Installation
-
-### Prerequisites
-- Docker and Docker Compose installed on your system.
-
-### Step 1: Clone the Repository
-```bash
-git clone https://github.com/your-username/rag-service.git
-cd rag-service
-```
-
-### Step 2: Build and Start Services
-Use Docker Compose to build and run the backend and frontend services:
-```bash
-docker-compose up --build
-```
-
-This will start:
-- The LangChain service at `http://localhost:8000`.
-- The Streamlit frontend at `http://localhost:8501`.
-
-### Step 3: Interact with the Application
-1. Open your browser and go to `http://localhost:8501`.
-2. Upload PDF files and ask questions.
-
 ## API Endpoints
 The LangChain service exposes the following endpoints:
 - **`POST /upload`**: Upload PDF files for processing.
 - **`POST /query`**: Send a question to the RAG pipeline and get an answer.
 
-## Development
-
-### Backend Development
-1. Navigate to the `langchain_service/` directory.
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Run the service locally:
-   ```bash
-   uvicorn main:app --host 0.0.0.0 --port 8000
-   ```
-
-### Frontend Development
-1. Navigate to the `streamlit_frontend/` directory.
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Run the Streamlit app locally:
-   ```bash
-   streamlit run main.py
-   ```
-
-### Testing
+## Testing
 Unit tests for the backend can be run using:
 ```bash
 pytest backend/tests
