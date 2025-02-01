@@ -1,35 +1,47 @@
-from typing import List, Dict
-import numpy as np
-from sentence_transformers import SentenceTransformer
-from app.document_loader import load_documents
-from app.retriever import split_text_into_chunks
+import chromadb
+from chromadb.config import Settings
+from typing import List, Dict, Any
 
-class DocumentStore:
+class ChromaDocStore:
     def __init__(self):
-        self.chunks: List[str] = []
-        self.chunk_embeddings: np.ndarray = None
-        print("Loading SentenceTransformer model...")
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
-
-    def load_documents(self, file_paths: List[str]) -> None:
-        """Load documents and compute embeddings."""
-        # Load and chunk documents
-        documents = load_documents(file_paths)
-        self.chunks = []
-        for doc in documents:
-            self.chunks.extend(split_text_into_chunks(doc))
+        self.settings = Settings(
+            allow_reset=True,
+            anonymized_telemetry=False,
+            is_persistent=True
+        )
         
-        # Compute embeddings for all chunks
-        self.chunk_embeddings = self.model.encode(self.chunks)
+        self.client = chromadb.Client(self.settings)
+        self.collection_name = "documents"
+        # Use default embedding function from ChromaDB
+        self.collection = self.client.get_or_create_collection(name=self.collection_name)
 
-    def get_query_embedding(self, query: str) -> np.ndarray:
-        """Get embedding for a query."""
-        return self.model.encode([query])
+    def add_documents(self, documents: List[str], metadatas: List[Dict[str, Any]], ids: List[str]) -> bool:
+        try:
+            self.collection.add(
+                documents=documents,
+                metadatas=metadatas,
+                ids=ids
+            )
+            return True
+        except Exception as e:
+            print(f"Error adding documents: {e}")
+            return False
 
-    def get_chunks(self) -> List[str]:
-        """Get all chunks."""
-        return self.chunks
+    def get_all_documents(self):
+        return self.collection.get()
 
-    def get_embeddings(self) -> np.ndarray:
-        """Get all embeddings."""
-        return self.chunk_embeddings
+    def query_documents(self, query: str, n_results: int = 5):
+        return self.collection.query(
+            query_texts=[query],
+            n_results=n_results
+        )
+
+    def clear_documents(self):
+        try:
+            results = self.collection.get()
+            if results['ids']:
+                self.collection.delete(ids=results['ids'])
+            return True
+        except Exception as e:
+            print(f"Error clearing documents: {e}")
+            return False

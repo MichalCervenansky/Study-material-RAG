@@ -1,16 +1,29 @@
 version: '3.8'
 services:
-  langchain_service:
+  backend:
     build:
       context: backend
     ports:
-      - "8000:8000"
+      - "8080:8000"  # Changed from 8000:8000 to avoid conflict with chroma
     env_file:
       - backend/.env
+    depends_on:
+      - chroma  # Added dependency to ensure chroma starts first
   streamlit_frontend:
     build:
       context: ./streamlit_frontend
     ports:
       - "8501:8501"
     depends_on:
-      - langchain_service
+      - backend
+  chroma:
+    image: chromadb/chroma:latest
+    environment:
+      - ALLOW_RESET=true
+    ports:
+      - "8001:8000"  # Changed host port to 8001
+    volumes:
+      - chroma_data:/chroma/chroma
+
+volumes:
+  chroma_data:
