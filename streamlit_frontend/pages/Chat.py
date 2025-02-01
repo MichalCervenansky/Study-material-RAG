@@ -29,45 +29,34 @@ if prompt := st.chat_input("What would you like to know?"):
         full_response = ""
         
         try:
-            # Make streaming request
             with requests.post(
                 BACKEND_URL,
                 json={"question": prompt},
                 stream=True,
-                headers={"Accept": "text/event-stream"}
+                headers={
+                    "Accept": "text/event-stream",
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive"
+                }
             ) as response:
                 response.raise_for_status()
                 
-                # Process the streaming response
                 for line in response.iter_lines():
                     if line:
-                        try:
-                            chunk = line.decode('utf-8')
-                            # Handle the case where the response is a generator
-                            if chunk.startswith('data: '):
-                                chunk = chunk[6:]  # Remove 'data: ' prefix
-                            chunk_data = json.loads(chunk)
-                            if isinstance(chunk_data, str):
-                                content = chunk_data
-                            elif "answer" in chunk_data:
-                                content = chunk_data["answer"]
-                            else:
+                        line = line.decode('utf-8')
+                        if line.startswith('data: '):
+                            try:
+                                data = json.loads(line[6:])
+                                content = data.get('answer', '')
+                                full_response += content
+                                message_placeholder.markdown(full_response + "▌")
+                            except json.JSONDecodeError:
                                 continue
-                                
-                            if isinstance(content, list):
-                                content = "".join(content)
-                            full_response += content
-                            message_placeholder.markdown(full_response + "▌")
-                        except json.JSONDecodeError:
-                            continue
-
-            # Final update without cursor
-            if full_response:
-                message_placeholder.markdown(full_response)
                 
+                message_placeholder.markdown(full_response)
+
         except requests.exceptions.RequestException as e:
-            error_msg = f"Error connecting to backend: {str(e)}"
-            st.error(error_msg)
+            st.error(f"Error: {str(e)}")
             full_response = "Sorry, there was an error connecting to the backend service."
             message_placeholder.markdown(full_response)
     

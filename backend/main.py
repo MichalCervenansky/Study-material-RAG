@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+import asyncio
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -31,16 +32,34 @@ class DocumentUploadRequest(BaseModel):
     metadatas: List[Dict[str, Any]]
     ids: List[str]
 
+
 @app.post("/query")
 async def query_service(request: QueryRequest):
     """
-    Answer a question using the RAG pipeline.
+    Streaming endpoint with proper async handling
     """
-    async def generate():
-        for chunk in rag_pipeline(chroma_store, request.question):
-            yield f"data: {json.dumps({'answer': chunk})}\n\n"
 
-    return StreamingResponse(generate(), media_type="text/event-stream")
+    async def generate():
+        try:
+            # Start streaming immediately
+            async for chunk in rag_pipeline(chroma_store, request.question):
+                if chunk:
+                    message = json.dumps({"answer": chunk})
+                    yield f"data: {message}\n\n"
+
+        except Exception as e:
+            error_msg = json.dumps({"error": str(e)})
+            yield f"event: error\ndata: {error_msg}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 @app.post("/documents/add")
 async def add_documents(request: DocumentUploadRequest):

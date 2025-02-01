@@ -1,60 +1,54 @@
+import aiohttp
 import json
-import requests
-from typing import Iterator, Optional, List, Dict
+from typing import AsyncGenerator
+from .logger_config import get_logger, log_time
+
+logger = get_logger(__name__)
 
 
 class OllamaAPI:
     def __init__(self, base_url: str = "http://localhost:11434"):
         self.base_url = base_url.rstrip("/")
         self.chat_url = f"{self.base_url}/api/chat"
+        self.timeout = aiohttp.ClientTimeout(total=3600)
+        logger.info(f"Initialized OllamaAPI with base URL: {base_url}")
 
-    def chat(
+    @log_time(logger)
+    async def chat(
             self,
-            messages: List[Dict[str, str]],
+            messages: list[dict[str, str]],
             model: str,
-            stream: bool = True,
-            format: Optional[dict] = None
-    ) -> Iterator[str]:
+            format: dict | None = None
+    ) -> AsyncGenerator[str, None]:
         """
-        Chat using the Ollama API.
-
-        Args:
-            messages (List[Dict[str, str]]): List of message dictionaries with 'role' and 'content'
-            model (str): Model name to use
-            stream (bool): Whether to stream the response
-            format (dict, optional): JSON schema for structured output
-
-        Yields:
-            str: Generated response chunks
+        Async streaming chat using Ollama API
         """
         payload = {
             "model": model,
             "messages": messages,
-            "stream": stream
+            "stream": True
         }
-
         if format:
             payload["format"] = format
 
         try:
-            response = requests.post(
-                self.chat_url,
-                json=payload,
-                stream=stream,
-                timeout=(2, None)
-            )
-            response.raise_for_status()
+            logger.info(f"Starting async chat request with model: {model}")
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                async with session.post(
+                        self.chat_url,
+                        json=payload,
+                        headers={"Content-Type": "application/json"}
+                ) as response:
+                    response.raise_for_status()
 
-            if stream:
-                for line in response.iter_lines():
-                    if line:
-                        json_response = json.loads(line)
-                        if "message" in json_response:
-                            yield json_response["message"]["content"]
-            else:
-                json_response = response.json()
-                if "message" in json_response:
-                    yield json_response["message"]["content"]
+                    async for line in response.content:
+                        if line:
+                            json_response = json.loads(line)
+                            if "message" in json_response:
+                                yield json_response["message"]["content"]
 
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"API request failed: {str(e)}")
+            logger.info("Finished streaming chat response")
+
+        except Exception as e:
+            logger.error(f"API request failed: {str(e)}")
+            raise
