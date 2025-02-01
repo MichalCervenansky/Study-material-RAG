@@ -1,7 +1,7 @@
-import asyncio
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel
 from app.rag_pipeline import rag_pipeline
 from app.document_store import ChromaDocStore
@@ -26,11 +26,12 @@ app.add_middleware(
 
 class QueryRequest(BaseModel):
     question: str
+    messages: List[Dict[str, str]] = []  # Chat history
+    previous_chunks: List[str] = []  # Optional: Previous relevant chunks
 
 class DocumentUploadRequest(BaseModel):
     documents: List[str]
     metadatas: List[Dict[str, Any]]
-    ids: List[str]
 
 
 @app.post("/query")
@@ -42,7 +43,11 @@ async def query_service(request: QueryRequest):
     async def generate():
         try:
             # Start streaming immediately
-            async for chunk in rag_pipeline(chroma_store, request.question):
+            async for chunk in rag_pipeline(
+                chroma_store, 
+                request.question,
+                request.messages
+            ):
                 if chunk:
                     message = json.dumps({"answer": chunk})
                     yield f"data: {message}\n\n"
@@ -61,16 +66,29 @@ async def query_service(request: QueryRequest):
         }
     )
 
+
+@app.get("/config")
+async def get_config():
+    return chroma_store.get_chunking_config()
+
 @app.post("/documents/add")
 async def add_documents(request: DocumentUploadRequest):
+    processed_docs = []
+    processed_metas = []
+    for i, (doc, meta) in enumerate(zip(request.documents, request.metadatas)):
+        chunks = chroma_store.text_splitter.split_text(doc)
+        processed_docs.extend(chunks)
+        processed_metas.extend([{
+            **meta,
+            "chunk_num": j,
+            "total_chunks": len(chunks)
+        } for j in range(len(chunks))])
+
     success = chroma_store.add_documents(
-        request.documents,
-        request.metadatas,
-        request.ids
+        processed_docs,
+        processed_metas
     )
-    if success:
-        return {"status": "success", "message": f"Added {len(request.documents)} documents"}
-    return {"status": "error", "message": "Failed to add documents"}
+    return {"status": "success" if success else "error"}
 
 @app.get("/documents")
 async def get_documents():

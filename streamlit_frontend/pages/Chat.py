@@ -1,9 +1,14 @@
 import json
 import requests
 import streamlit as st
+from pydantic import BaseModel
+from typing import List, AsyncGenerator
+import os
+from dotenv import load_dotenv
 
-# Backend configuration
-BACKEND_URL = "http://localhost:8000/query"
+# Load environment variables
+load_dotenv()
+BACKEND_URL = f"{os.getenv('BACKEND_URL')}/query"
 
 # Page config
 st.set_page_config(page_title="RAG Chat", page_icon="💬")
@@ -31,7 +36,10 @@ if prompt := st.chat_input("What would you like to know?"):
         try:
             with requests.post(
                 BACKEND_URL,
-                json={"question": prompt},
+                json={
+                    "question": prompt,
+                    "messages": st.session_state.messages[:-1]  # Send all messages except current prompt
+                },
                 stream=True,
                 headers={
                     "Accept": "text/event-stream",
@@ -68,3 +76,45 @@ with st.sidebar:
     if st.button("Clear Chat"):
         st.session_state.messages = []
         st.rerun()
+
+class QueryRequest(BaseModel):
+    question: str
+    messages: List[dict] = []  # Add message history
+
+async def rag_pipeline(document_store, query: str, messages: List[dict] = None) -> AsyncGenerator[str, None]:
+    results = document_store.query_documents(query)
+    
+    if not results or not results['documents']:
+        yield "No relevant documents found."
+        return
+
+    relevant_chunks = results['documents'][0]
+    combined_context = " ".join(relevant_chunks)
+    
+    # Format chat history
+    chat_history = ""
+    if messages:
+        chat_history = "\n".join([
+            f"{msg['role']}: {msg['content']}" 
+            for msg in messages
+        ])
+
+    prompt = [
+        {
+            "role": "system",
+            "content": f"""**RAG Assistant Guidelines**
+            ...
+            ### CHAT HISTORY ###
+            {chat_history}
+
+            ### CONTEXT ###
+            {combined_context}
+
+            ### QUESTION ###
+            {query}"""
+        },
+        {
+            "role": "user",
+            "content": "Please provide a comprehensive answer with document citations."
+        }
+    ]

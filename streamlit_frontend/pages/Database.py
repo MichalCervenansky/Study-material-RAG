@@ -6,8 +6,11 @@ from typing import List
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import tempfile
 import requests
+from dotenv import load_dotenv
 
-BACKEND_URL = "http://localhost:8000"
+# Load environment variables
+load_dotenv()
+BACKEND_URL = os.getenv('BACKEND_URL')
 
 def make_request(endpoint: str, method: str = "GET", json_data: dict = None):
     try:
@@ -21,6 +24,9 @@ def make_request(endpoint: str, method: str = "GET", json_data: dict = None):
     except requests.exceptions.RequestException as e:
         st.error(f"Error connecting to backend: {str(e)}")
         return None
+
+def get_config():
+    return make_request("config")
 
 def extract_text_from_pdf(pdf_file) -> str:
     pdf_reader = PdfReader(pdf_file)
@@ -42,10 +48,10 @@ def process_zip_file(zip_file) -> List[str]:
                     os.unlink(temp_file.name)
     return texts
 
-def chunk_text(text: str) -> List[str]:
+def chunk_text(text: str, config: dict) -> List[str]:
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200,
+        chunk_size=config['chunk_size'],
+        chunk_overlap=config['chunk_overlap'],
         length_function=len
     )
     return text_splitter.split_text(text)
@@ -57,8 +63,14 @@ st.header("Upload Documents")
 uploaded_files = st.file_uploader("Choose PDF or ZIP files", type=['pdf', 'zip'], accept_multiple_files=True)
 
 if uploaded_files:
+    config = get_config()
+    if not config:
+        st.error("Failed to get configuration from server")
+        st.stop()
+        
     all_chunks = []
     processed_files = []
+    chunk_id = 0
     
     for uploaded_file in uploaded_files:
         try:
@@ -69,12 +81,15 @@ if uploaded_files:
                 texts = process_zip_file(uploaded_file)
             
             for text in texts:
-                chunks = chunk_text(text)
+                chunks = chunk_text(text, config)
                 all_chunks.extend(chunks)
-                # Simplified metadata
-                processed_files.extend([{
-                    "source": uploaded_file.name
-                } for _ in range(len(chunks))])
+                # Add metadata and IDs for each chunk
+                for _ in chunks:
+                    processed_files.append({
+                        "source": uploaded_file.name,
+                        "chunk_id": f"doc_{chunk_id}"
+                    })
+                    chunk_id += 1
             
             st.success(f"Processed {uploaded_file.name}")
         except Exception as e:
@@ -82,22 +97,23 @@ if uploaded_files:
             continue
     
     if all_chunks:
-        st.info(f"Total files: {len(uploaded_files)} | Total chunks: {len(all_chunks)}")
-            
         if st.button("Ingest to ChromaDB"):
             response = make_request(
                 "documents/add",
                 method="POST",
                 json_data={
                     "documents": all_chunks,
-                    "metadatas": processed_files,
-                    "ids": [f"doc_{i}" for i in range(len(all_chunks))]
+                    "metadatas": processed_files
                 }
             )
-            if response and response["status"] == "success":
-                st.success(f"Successfully ingested {len(all_chunks)} chunks!")
-            else:
+            
+            if not response:
                 st.error("Failed to ingest documents")
+            elif response.get("status") == "success":
+                st.success(f"Successfully ingested {len(all_chunks)} chunks!")
+                st.info(f"Total files: {len(uploaded_files)} | Total chunks: {len(all_chunks)}")
+            else:
+                st.error("Failed to ingest documents: " + response.get("detail", "Unknown error"))
 
 # Document listing section
 st.header("Stored Documents")

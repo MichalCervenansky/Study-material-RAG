@@ -2,16 +2,20 @@ import aiohttp
 import json
 from typing import AsyncGenerator
 from .logger_config import get_logger, log_time
+import os
+from dotenv import load_dotenv
 
+# Update path to look for .env in root directory
+load_dotenv(dotenv_path='../../.env')
 logger = get_logger(__name__)
 
 
 class OllamaAPI:
-    def __init__(self, base_url: str = "http://localhost:11434"):
-        self.base_url = base_url.rstrip("/")
+    def __init__(self, base_url: str = None):
+        self.base_url = (base_url or os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')).rstrip("/")
         self.chat_url = f"{self.base_url}/api/chat"
         self.timeout = aiohttp.ClientTimeout(total=3600)
-        logger.info(f"Initialized OllamaAPI with base URL: {base_url}")
+        logger.info(f"Initialized OllamaAPI with base URL: {self.base_url}")
 
     @log_time(logger)
     async def chat(
