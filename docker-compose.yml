@@ -2,12 +2,9 @@ services:
   backend:
     build:
       context: ./backend
-    ports:
-      - "8000:8000"
+    network_mode: "host"
     env_file:
       - .env
-    networks:
-      - app-network
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -15,20 +12,13 @@ services:
   frontend:
     build:
       context: ./streamlit_frontend
-    ports:
-      - "8501:8501"
+    network_mode: "host"
     env_file:
       - .env
     environment:
-      - BACKEND_URL=http://backend:8000
+      - BACKEND_URL=http://localhost:8000
     depends_on:
       - backend
-    networks:
-      - app-network
     dns:
       - 8.8.8.8
       - 8.8.4.4
-
-networks:
-  app-network:
-    driver: bridge

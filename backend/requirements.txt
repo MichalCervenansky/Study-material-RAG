@@ -1,11 +1,6 @@
-langchain
-ollama
-uvicorn
-fastapi
-PyPDF2
-python-dotenv
-python-multipart
-sentence-transformers
-scikit-learn
-numpy
-aiohttp
+aiohttp>=3.9.0
+python-dotenv>=1.0.0
+chromadb>=0.4.18
+langchain-text-splitters>=0.0.1
+fastapi>=0.104.0
+uvicorn>=0.24.0
