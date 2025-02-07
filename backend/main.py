@@ -1,13 +1,16 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pydantic import BaseModel
 from app.rag_pipeline import rag_pipeline
 from app.document_store import ChromaDocStore
 from typing import List, Dict, Any
 import json
 import uvicorn
+from app.logger_config import get_logger, log_time
+
+# Initialize logger
+logger = get_logger(__name__)
 
 # Initialize ChromaDB store
 chroma_store = ChromaDocStore()
@@ -28,17 +31,15 @@ class QueryRequest(BaseModel):
     question: str
     messages: List[Dict[str, str]] = []  # Chat history
     previous_chunks: List[str] = []  # Optional: Previous relevant chunks
-
-class DocumentUploadRequest(BaseModel):
-    documents: List[str]
-    metadatas: List[Dict[str, Any]]
-
+    model: str | None = None  # Optional: Model name
 
 @app.post("/query")
+@log_time(logger)
 async def query_service(request: QueryRequest):
     """
     Streaming endpoint with proper async handling
     """
+    logger.info(f"Received query request with question: {request.question}")
 
     async def generate():
         try:
@@ -46,13 +47,15 @@ async def query_service(request: QueryRequest):
             async for chunk in rag_pipeline(
                 chroma_store, 
                 request.question,
-                request.messages
+                request.messages,
+                model=request.model
             ):
                 if chunk:
                     message = json.dumps({"answer": chunk})
                     yield f"data: {message}\n\n"
 
         except Exception as e:
+            logger.error(f"Error in query streaming: {str(e)}", exc_info=True)
             error_msg = json.dumps({"error": str(e)})
             yield f"event: error\ndata: {error_msg}\n\n"
 
@@ -66,44 +69,83 @@ async def query_service(request: QueryRequest):
         }
     )
 
-
 @app.get("/config")
+@log_time(logger)
 async def get_config():
+    logger.info("Fetching chunking configuration")
     return chroma_store.get_chunking_config()
 
-@app.post("/documents/add")
-async def add_documents(request: DocumentUploadRequest):
-    processed_docs = []
-    processed_metas = []
-    for i, (doc, meta) in enumerate(zip(request.documents, request.metadatas)):
-        chunks = chroma_store.text_splitter.split_text(doc)
-        processed_docs.extend(chunks)
-        processed_metas.extend([{
-            **meta,
-            "chunk_num": j,
-            "total_chunks": len(chunks)
-        } for j in range(len(chunks))])
-
-    success = chroma_store.add_documents(
-        processed_docs,
-        processed_metas
-    )
-    return {"status": "success" if success else "error"}
-
 @app.get("/documents")
+@log_time(logger)
 async def get_documents():
+    logger.info("Fetching all documents")
     results = chroma_store.get_all_documents()
+    logger.info(f"Retrieved {len(results)} documents")
     return results
 
 @app.post("/documents/clear")
+@log_time(logger)
 async def clear_documents():
     try:
+        logger.info("Attempting to clear all documents")
         success = chroma_store.clear_documents()
         if success:
+            logger.info("Successfully cleared all documents")
             return {"status": "success", "message": "Documents cleared successfully"}
     except Exception as e:
+        logger.error(f"Failed to clear documents: {str(e)}", exc_info=True)
         return {"status": "error", "message": f"Failed to clear documents: {str(e)}"}
+    logger.error("Failed to clear documents: Unknown error")
     return {"status": "error", "message": "Failed to clear documents"}
+
+@app.post("/documents/upload")
+@log_time(logger)
+async def upload_documents(files: List[UploadFile] = File(...)):
+    logger.info(f"Received {len(files)} files for upload")
+    all_documents = []
+    
+    for file in files:
+        if not file.filename.lower().endswith('.pdf'):
+            continue
+            
+        try:
+            documents = chroma_store.extract_text_from_pdf(file.file)
+            all_documents.extend(documents)
+            logger.info(f"Processed {file.filename}")
+        except Exception as e:
+            logger.error(f"Error processing {file.filename}: {str(e)}")
+            continue
+    
+    if all_documents:
+        processed_docs = []
+        processed_metas = []
+        
+        for doc in all_documents:
+            chunks = chroma_store.text_splitter.split_text(doc['text'])
+            # Calculate page range for each chunk
+            for j, chunk in enumerate(chunks):
+                processed_docs.append(chunk)
+                # Ensure all metadata fields have valid values
+                metadata = {
+                    'source': str(doc.get('file_name', 'unknown')),
+                    'type': 'pdf',
+                    'file_name': str(doc.get('file_name', 'unknown')),
+                    'page_number': str(doc.get('page_number', 'unknown')),
+                    'page_range': f"{doc.get('page_number', 'unknown')}",  # Add page_range field
+                    'chunk_num': str(j + 1),
+                    'total_chunks': str(len(chunks))
+                }
+                processed_metas.append(metadata)
+        
+        success = chroma_store.add_documents(processed_docs, processed_metas)
+        if success:
+            logger.info(f"Successfully added {len(processed_docs)} chunks to the database")
+            return {"status": "success", "message": f"Successfully processed {len(files)} files"}
+        else:
+            logger.error("Failed to add documents to database")
+            return {"status": "error", "message": "Failed to add documents to database"}
+    
+    return {"status": "error", "message": "No valid documents processed"}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

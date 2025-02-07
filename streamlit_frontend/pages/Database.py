@@ -1,22 +1,20 @@
 import streamlit as st
 import os
-from PyPDF2 import PdfReader
-import zipfile
-from typing import List
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-import tempfile
+import sys
 import requests
 from dotenv import load_dotenv
 
 # Load environment variables
-load_dotenv()
+load_dotenv(dotenv_path='../../.env')
 BACKEND_URL = os.getenv('BACKEND_URL')
 
-def make_request(endpoint: str, method: str = "GET", json_data: dict = None):
+def make_request(endpoint: str, method: str = "GET", json_data: dict = None, files: list = None):
     try:
         url = f"{BACKEND_URL}/{endpoint}"
         if method == "GET":
             response = requests.get(url)
+        elif files:
+            response = requests.post(url, files=files)
         else:
             response = requests.post(url, json=json_data)
         response.raise_for_status()
@@ -28,92 +26,23 @@ def make_request(endpoint: str, method: str = "GET", json_data: dict = None):
 def get_config():
     return make_request("config")
 
-def extract_text_from_pdf(pdf_file) -> str:
-    pdf_reader = PdfReader(pdf_file)
-    text = ""
-    for page in pdf_reader.pages:
-        text += page.extract_text()
-    return text
-
-def process_zip_file(zip_file) -> List[str]:
-    texts = []
-    with zipfile.ZipFile(zip_file) as z:
-        for filename in z.namelist():
-            if filename.endswith('.pdf'):
-                with z.open(filename) as f:
-                    with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-                        temp_file.write(f.read())
-                        temp_file.flush()
-                        texts.append(extract_text_from_pdf(temp_file.name))
-                    os.unlink(temp_file.name)
-    return texts
-
-def chunk_text(text: str, config: dict) -> List[str]:
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=config['chunk_size'],
-        chunk_overlap=config['chunk_overlap'],
-        length_function=len
-    )
-    return text_splitter.split_text(text)
-
 st.title("Document Database Management")
 
 # File upload section
 st.header("Upload Documents")
-uploaded_files = st.file_uploader("Choose PDF or ZIP files", type=['pdf', 'zip'], accept_multiple_files=True)
+uploaded_files = st.file_uploader("Choose PDF files", type=['pdf'], accept_multiple_files=True)
 
 if uploaded_files:
-    config = get_config()
-    if not config:
-        st.error("Failed to get configuration from server")
-        st.stop()
+    if st.button("Process and Ingest Files"):
+        files = [("files", file) for file in uploaded_files]
+        response = make_request("documents/upload", method="POST", files=files)
         
-    all_chunks = []
-    processed_files = []
-    chunk_id = 0
-    
-    for uploaded_file in uploaded_files:
-        try:
-            if uploaded_file.type == "application/pdf":
-                text = extract_text_from_pdf(uploaded_file)
-                texts = [text]
-            else:  # ZIP file
-                texts = process_zip_file(uploaded_file)
-            
-            for text in texts:
-                chunks = chunk_text(text, config)
-                all_chunks.extend(chunks)
-                # Add metadata and IDs for each chunk
-                for _ in chunks:
-                    processed_files.append({
-                        "source": uploaded_file.name,
-                        "chunk_id": f"doc_{chunk_id}"
-                    })
-                    chunk_id += 1
-            
-            st.success(f"Processed {uploaded_file.name}")
-        except Exception as e:
-            st.error(f"Error processing {uploaded_file.name}: {str(e)}")
-            continue
-    
-    if all_chunks:
-        if st.button("Ingest to ChromaDB"):
-            response = make_request(
-                "documents/add",
-                method="POST",
-                json_data={
-                    "documents": all_chunks,
-                    "metadatas": processed_files
-                }
-            )
-            
-            if not response:
-                st.error("Failed to ingest documents")
-            elif response.get("status") == "success":
-                st.success(f"Successfully ingested {len(all_chunks)} chunks!")
-                st.info(f"Total files: {len(uploaded_files)} | Total chunks: {len(all_chunks)}")
-            else:
-                st.error("Failed to ingest documents: " + response.get("detail", "Unknown error"))
+        if not response:
+            st.error("Failed to upload documents")
+        elif response.get("status") == "success":
+            st.success(response.get("message", "Successfully uploaded files!"))
+        else:
+            st.error("Failed to upload documents: " + response.get("message", "Unknown error"))
 
 # Document listing section
 st.header("Stored Documents")

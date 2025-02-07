@@ -14,6 +14,7 @@ class OllamaAPI:
     def __init__(self, base_url: str = None):
         self.base_url = (base_url or os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')).rstrip("/")
         self.chat_url = f"{self.base_url}/api/chat"
+        self.models_url = f"{self.base_url}/api/tags"
         self.timeout = aiohttp.ClientTimeout(total=3600)
         logger.info(f"Initialized OllamaAPI with base URL: {self.base_url}")
 
@@ -21,12 +22,13 @@ class OllamaAPI:
     async def chat(
             self,
             messages: list[dict[str, str]],
-            model: str,
+            model: str | None = None,
             format: dict | None = None
     ) -> AsyncGenerator[str, None]:
         """
         Async streaming chat using Ollama API
         """
+        
         payload = {
             "model": model,
             "messages": messages,
