@@ -2,8 +2,6 @@
 
 This guide provides step-by-step instructions for installing and running the Study Material RAG (Retrieval-Augmented Generation) project on a Windows computer. This project utilizes Ollama for local LLM capabilities, Docker for containerization, and Docker Compose for orchestrating the application. This update addresses the "MarkItDown returned None result" error.
 
-**Important:** The error "MarkItDown returned None result" indicates that the `markitdown` library failed to convert the PDF to text. This can happen for various reasons, including corrupted PDFs, PDFs with complex layouts, or limitations in the `markitdown` library itself. The following steps incorporate `pdfminer.six` as a fallback when `markitdown` fails to extract text from PDF files.
-
 ## 1. Install Ollama and Pull the Required Model
 
 Ollama allows you to run Large Language Models (LLMs) locally.
