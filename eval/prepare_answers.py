@@ -9,9 +9,9 @@ from datetime import datetime
 
 # Configuration
 BACKEND_URL = "http://localhost:8000"
-SAMPLE_PDF_PATH = "sample.pdf"
-QUESTIONS_CSV_PATH = "questions.csv"
-RESULTS_JSON_PATH = "results/results.json"
+SAMPLE_PDF_PATH = "eval/AI_regulation.pdf"
+QUESTIONS_CSV_PATH = "eval/questions.csv"
+RESULTS_JSON_PATH = "eval/results/results.json"
 
 
 

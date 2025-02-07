@@ -8,9 +8,7 @@ services:
       - .env
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    dns:
-      - 8.8.8.8
-      - 8.8.4.4
+
 
   frontend:
     build:
@@ -23,6 +21,3 @@ services:
       - BACKEND_URL=http://backend:8000
     depends_on:
       - backend
-    dns:
-      - 8.8.8.8
-      - 8.8.4.4

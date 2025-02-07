@@ -182,7 +182,7 @@ def main():
 def run_full_evaluation():
     """Run both prepare_answers and evaluation in sequence"""
     print("Step 1: Preparing answers...")
-    #prepare_answers_main()
+    prepare_answers_main()
     
     print("\nStep 2: Evaluating responses...")
     main()

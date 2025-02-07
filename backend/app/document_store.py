@@ -7,7 +7,16 @@ from pathlib import Path
 from dotenv import load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from chromadb.utils import embedding_functions
-from PyPDF2 import PdfReader
+from markitdown import MarkItDown
+import mimetypes
+import asyncio
+from io import BytesIO
+from pdfminer.high_level import extract_text as pdf_extract_text
+from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
+from pdfminer.converter import TextConverter
+from pdfminer.layout import LAParams
+from pdfminer.pdfpage import PDFPage
+from io import StringIO
 
 # Get the project root directory (where .env is located)
 root_dir = Path(__file__).resolve().parents[2]  # Go up 2 levels from document_store.py
@@ -56,28 +65,126 @@ class ChromaDocStore:
         logger.info(f"Initialized ChromaDocStore with chunk_size={self.chunk_size}, chunk_overlap={self.chunk_overlap}")
 
     @staticmethod
-    def extract_text_from_pdf(pdf_file) -> List[Dict[str, any]]:
+    def extract_text_from_pdf(file_obj) -> list:
         """
-        Extract text from a PDF file or file object
-        Returns: List of dicts with 'text' and metadata for each page
+        Extract text from a PDF file using pdfminer.six, returning a list of page texts.
+        Each element in the list corresponds to text extracted from a page.
+        """
+        resource_manager = PDFResourceManager()
+        laparams = LAParams()
+        codec = 'utf-8'
+        page_texts = []
+
+        for page_number, page in enumerate(PDFPage.get_pages(file_obj, check_extractable=True), start=1):
+            output_string = StringIO()
+            converter = TextConverter(resource_manager, output_string, codec=codec, laparams=laparams)
+            interpreter = PDFPageInterpreter(resource_manager, converter)
+            try:
+                interpreter.process_page(page)
+                text = output_string.getvalue()
+                page_texts.append(text)
+            finally:
+                converter.close()
+                output_string.close()
+
+        return page_texts
+
+    @staticmethod
+    async def extract_text_from_document(file_obj) -> List[Dict[str, any]]:
+        """
+        Extract text from a document, handling PDFs with pdfminer.six and other formats with MarkItDown.
         """
         try:
-            pdf_reader = PdfReader(pdf_file)
-            documents = []
-            file_name = getattr(pdf_file, 'name', 'unknown')
-            
-            for page_num, page in enumerate(pdf_reader.pages, 1):
-                text = page.extract_text()
-                if text.strip():  # Only include non-empty pages
-                    documents.append({
-                        'text': text,
-                        'page_number': page_num,
-                        'file_name': file_name
-                    })
+            # Get the file name from the file object
+            file_name = getattr(file_obj, 'filename', None) or getattr(file_obj, 'name', 'unknown')
+            file_type = mimetypes.guess_type(file_name)[0]
+
+            logger.info(f"Processing document: {file_name} (type: {file_type})")
+
+            if not file_type:
+                logger.warning(f"Could not determine file type for {file_name}, attempting conversion anyway")
+
+            # Read the file content if it's a FastAPI UploadFile
+            if hasattr(file_obj, 'read'):
+                logger.debug("Reading file content...")
+                if asyncio.iscoroutinefunction(file_obj.read):
+                    file_content = await file_obj.read()
+                else:
+                    file_content = file_obj.read()
+
+                logger.debug(f"Read {len(file_content)} bytes from file")
+
+                # Convert to file-like object
+                file_obj = BytesIO(file_content)
+                file_obj.seek(0)  # Ensure we're at the start of the stream
+                logger.debug("Converted to BytesIO object")
+
+            # Handle PDF files separately using pdfminer
+            if file_type == 'application/pdf':
+                logger.info("Detected PDF file, using pdfminer to extract text.")
+                try:
+                    page_texts = ChromaDocStore.extract_text_from_pdf(file_obj)  # Now returns a list of texts per page
+                    if not page_texts or all(not text.strip() for text in page_texts):
+                        raise ValueError("pdfminer extracted empty text content")
+                    documents = []
+                    for i, text in enumerate(page_texts, start=1):
+                        if text.strip():
+                            documents.append({
+                                'text': text,
+                                'page_number': i,  # Set page number dynamically
+                                'file_name': file_name,
+                                'file_type': file_type
+                            })
+                    if not documents:
+                        raise ValueError("No non-empty pages extracted from PDF")
+                    logger.info(f"Successfully extracted PDF with {len(documents)} pages from {file_name}")
+                    return documents
+                except Exception as pdf_error:
+                    logger.error(f"pdfminer extraction error: {str(pdf_error)}", exc_info=True)
+                    raise ValueError(f"PDF extraction failed: {str(pdf_error)}")
+
+            # Initialize and configure MarkItDown for non-PDF files
+            logger.debug("Initializing MarkItDown for non-PDF file...")
+            md = MarkItDown()
+
+            # Convert document to markdown
+            logger.debug("Starting document conversion with MarkItDown...")
+            try:
+                result = md.convert(file_obj)
+                logger.debug("Document conversion completed")
+
+
+                if not result:
+                    raise ValueError("MarkItDown returned None result")
+
+                if not hasattr(result, 'text_content'):
+                    raise ValueError("MarkItDown result missing text_content attribute")
+
+                if not result.text_content:
+                    raise ValueError("MarkItDown extracted empty text content")
+
+                logger.debug(f"Text content length: {len(result.text_content)}")
+                logger.debug(f"First 100 chars: {result.text_content[:100]}")
+
+            except Exception as conv_error:
+                logger.error(f"MarkItDown conversion error: {str(conv_error)}", exc_info=True)
+                raise ValueError(f"Document conversion failed: {str(conv_error)}")
+
+            # Create document entry
+            documents = [{
+                'text': result.text_content,
+                'page_number': 1,
+                'file_name': file_name,
+                'file_type': file_type or 'unknown'
+            }]
+
+            logger.info(f"Successfully extracted {len(result.text_content)} characters from {file_name}")
             return documents
+
         except Exception as e:
-            logger.error(f"Error processing PDF {getattr(pdf_file, 'name', 'unknown')}: {str(e)}")
+            logger.error(f"Error extracting text from document {file_name}: {str(e)}", exc_info=True)
             raise
+
 
     @log_time(logger)
     def add_documents(self, documents: List[str], metadatas: List[Dict[str, Any]], ids: List[str] = None) -> bool:

@@ -102,50 +102,64 @@ async def clear_documents():
 @log_time(logger)
 async def upload_documents(files: List[UploadFile] = File(...)):
     logger.info(f"Received {len(files)} files for upload")
+    for file in files:
+        logger.debug(f"File details - name: {file.filename}, content_type: {file.content_type}, size: {file.size if hasattr(file, 'size') else 'unknown'}")
+    
     all_documents = []
+    errors = []
     
     for file in files:
-        if not file.filename.lower().endswith('.pdf'):
-            continue
-            
         try:
-            documents = chroma_store.extract_text_from_pdf(file.file)
-            all_documents.extend(documents)
-            logger.info(f"Processed {file.filename}")
+            # Process the file content
+            documents = await chroma_store.extract_text_from_document(file)
+            if documents:
+                all_documents.extend(documents)
+                logger.info(f"Successfully processed {file.filename}")
+            else:
+                errors.append(f"No documents extracted from {file.filename}")
         except Exception as e:
-            logger.error(f"Error processing {file.filename}: {str(e)}")
-            continue
+            error_msg = f"Error processing {file.filename}: {str(e)}"
+            logger.error(error_msg)
+            errors.append(error_msg)
+        finally:
+            # Ensure we close the file
+            await file.close()
     
-    if all_documents:
-        processed_docs = []
-        processed_metas = []
-        
-        for doc in all_documents:
-            chunks = chroma_store.text_splitter.split_text(doc['text'])
-            # Calculate page range for each chunk
-            for j, chunk in enumerate(chunks):
-                processed_docs.append(chunk)
-                # Ensure all metadata fields have valid values
-                metadata = {
-                    'source': str(doc.get('file_name', 'unknown')),
-                    'type': 'pdf',
-                    'file_name': str(doc.get('file_name', 'unknown')),
-                    'page_number': str(doc.get('page_number', 'unknown')),
-                    'page_range': f"{doc.get('page_number', 'unknown')}",  # Add page_range field
-                    'chunk_num': str(j + 1),
-                    'total_chunks': str(len(chunks))
-                }
-                processed_metas.append(metadata)
-        
-        success = chroma_store.add_documents(processed_docs, processed_metas)
-        if success:
-            logger.info(f"Successfully added {len(processed_docs)} chunks to the database")
-            return {"status": "success", "message": f"Successfully processed {len(files)} files"}
-        else:
-            logger.error("Failed to add documents to database")
-            return {"status": "error", "message": "Failed to add documents to database"}
+    if not all_documents:
+        error_summary = "\n".join(errors)
+        return {
+            "status": "error", 
+            "message": f"No documents were successfully processed. Errors:\n{error_summary}"
+        }
     
-    return {"status": "error", "message": "No valid documents processed"}
+    # Process the successful documents
+    processed_docs = []
+    processed_metas = []
+    
+    for doc in all_documents:
+        chunks = chroma_store.text_splitter.split_text(doc['text'])
+        # Calculate page range for each chunk
+        for j, chunk in enumerate(chunks):
+            processed_docs.append(chunk)
+            # Ensure all metadata fields have valid values
+            metadata = {
+                'source': str(doc.get('file_name', 'unknown')),
+                'type': doc.get('file_type', 'unknown'),  # Use file_type from document
+                'file_name': str(doc.get('file_name', 'unknown')),
+                'page_number': str(doc.get('page_number', 'unknown')),
+                'page_range': f"{doc.get('page_number', 'unknown')}",
+                'chunk_num': str(j + 1),
+                'total_chunks': str(len(chunks))
+            }
+            processed_metas.append(metadata)
+    
+    success = chroma_store.add_documents(processed_docs, processed_metas)
+    if success:
+        logger.info(f"Successfully added {len(processed_docs)} chunks to the database")
+        return {"status": "success", "message": f"Successfully processed {len(files)} files"}
+    else:
+        logger.error("Failed to add documents to database")
+        return {"status": "error", "message": "Failed to add documents to database"}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
