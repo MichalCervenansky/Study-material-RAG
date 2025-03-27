@@ -9,7 +9,7 @@ from prepare_answers import main as prepare_answers_main
 def get_phi_evaluation(question, answer, max_retries=3):
     """Query model to evaluate the RAG response with retry logic"""
     
-    prompt = """You are an expert evaluator of RAG (Retrieval Augmented Generation) systems. Your task is to evaluate the following question and answer pair from a RAG system about the EU AI Act.
+    prompt = """You are an expert evaluator of RAG (Retrieval Augmented Generation) systems. Your task is to evaluate the following question and answer pair from a RAG system.
 
 Please evaluate the response on a scale of 0-100 in the following categories:
 1. Relevance: How well does the answer address the specific question asked?
